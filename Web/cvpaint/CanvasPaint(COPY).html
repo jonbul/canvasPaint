@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+
+
+<html>
+    <head>
+        <meta http-equiv="Content-type" content="text/html;charset=iso-8859-15" />
+        <style>
+            *{
+                -webkit-touch-callout: none;
+                -webkit-user-select: none;
+                -khtml-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+            }
+            .window{
+                position: absolute;
+                /*top:220px;
+                left: 160px;*/
+                background-color:white;
+                border-style: ridge;
+                /*min-height: 200px;*/
+                z-index: 1;
+                max-height: 1000px;
+            }
+            .windowBar{
+                background-color: blue;
+                width: 100%;
+                display: inline-block;
+                color: white;
+            }
+            .windowContent{
+                resize: vertical;
+                overflow: scroll;
+                border-style: ridge;
+                display: block;
+                min-height: 200px;
+            }
+            #boardCover{
+                /*background-image: url("./img/boardbg.png");*/
+                /*display: inline-block;*/
+                /*resize: both;*/
+                /*border-style: ridge;*/
+                /*overflow: scroll;*/
+                width: 100%;
+                height: 100%;
+                
+            }
+            #boardCover div{
+                background-image: url("./img/boardbg.png");
+                display: inline-block
+            }
+            #board{
+                border-style: ridge;
+            }
+        </style>
+        <!--VARIABLES-->
+        <script>
+            //CONSTANTS
+            //DRAW ACTIONS
+            const RECT = "rect", ARC = "arc", SEMIARC = "semiarc", LINE = "line", PENCIL = "pencil", CLOSEDPENCIL = "closedpencil", POLIGON = "poligon", RUBBER = "rubber", IMAGEFORM = "imageform";
+            //UTIL ACTIONS
+            const COLORPICKER = "colorpicker";
+            
+            //VARIABLES
+
+            var board,boardL,boardT;
+            var ctx;
+            
+            var boardCoverW;
+            var boardCoverH;
+            
+            var bool_clicked = false;
+            var bool_movingWin = false;
+            var clickStep = -1;
+            var undoEnabled = true;
+            //var elements = new Array();
+            var delElements = new Array();
+            var selElem;
+            var selWin;
+            var keys = new Array();
+            var bgColor = "rgba(255,255,255,0)"
+        </script>
+        <!--OBJECTS-->
+        <script>
+            //OBJECTS DECLARATION
+            
+            function masterJasonFile(cnvW,cnvH,bgc,gridH,gridV,layers){
+                this.canvas = new function(cnvW,cnvH){
+                    this.width = cnvW;
+                    this.height = cnvH;
+                }
+                this.canvas.width = cnvW;
+                this.canvas.height = cnvH;
+                
+                this.bgc = bgc;
+                
+                this.grid = new function(gridH,gridV){
+                    this.h = gridH;
+                    this.v = gridV;
+                }
+                this.grid.h = gridH;
+                this.grid.v = gridV;
+                this.layers = layers;
+            }
+            //FORMS
+            function Rect(x,y,w,h,cbg,cbr,brw,grad){
+                this.desc = RECT;
+                this.pos = 0;
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.cbg = cbg;
+                this.cbr = cbr;
+                this.brw = brw;
+                this.grad = grad;
+                this.draw = function(context){
+                    context.fillStyle=this.cbg;//BACKGROUND
+                    if(this.grad>0){
+                        context.rotate(this.grad*Math.PI/180);//document.getElementById("rectRotate").value);
+                    }
+                    context.fillRect(this.x,this.y,this.w,this.h);
+                    if(this.brw>0){
+                        context.strokeRect(this.x,this.y,this.w,this.h);
+                        context.strokeStyle = this.cbr;
+                        context.lineWidth=this.brw;
+                        context.stroke();
+                    }
+                    context.rotate((360-this.grad)*Math.PI/180);
+                    context.fill;
+                }
+            }
+            function Arc(x,y,r,g1,g2,cbg,cbr,brw){
+                this.desc = ARC;
+                this.pos = 0;
+                this.x = x;
+                this.y = y;
+                this.r = r;
+                this.g1 = g1;
+                this.g2 = g2;
+                this.cbg = cbg;
+                this.cbr = cbr;
+                this.brw = brw;
+                this.draw = function(context){
+                    if(this.r<0)this.r*=-1;
+                    context.beginPath();
+                    context.fillStyle = this.cbg;//BACKGROUND
+                    context.arc(this.x,this.y,this.r, this.g1, this.g2);
+                    if(this.brw>0){
+                        context.strokeStyle = cbr;//BORDER
+                        //context.strokeArc(this.x,this.y,this.w,this.h);
+                        context.strokeStyle = this.cbr;
+                        context.lineWidth=this.brw;
+                        context.stroke();
+                    }
+                    
+                    context.fill();
+                }
+            }
+            function Line(x1,y1,x2,y2,cbr,brw){
+                this.desc = LINE;
+                this.pos = 0;
+                this.x1 = x1;
+                this.y1 = y1;
+                this.x2 = x2;
+                this.y2 = y2;
+                this.cbr = cbr;
+                this.brw = brw;
+                this.draw = function(context){
+                    context.beginPath();
+                    context.strokeStyle = this.cbr;//BORDER
+                    context.moveTo(this.x1,this.y1);
+                    context.lineTo(this.x2,this.y2);
+                    context.lineWidth = this.brw; 
+                    context.stroke();
+                    context.fill();
+                }
+            }
+            function Poligon(points,cbg,cbr,brw){
+                this.desc = POLIGON;
+                this.pos = 0;
+                if(points === undefined){
+                    this.points = new Array();
+                }else{
+                    this.points = points;
+                }
+                this.cbg = cbg;
+                this.cbr = cbr;
+                this.brw = brw;
+                this.draw = function(context){
+                    if(this.points.length>0){
+                        context.fillStyle= this.cbg;
+                        context.strokeStyle = this.cbr;
+                        context.beginPath();
+                        context.moveTo(this.points[0].x, this.points[0].y);
+                        for(var i = 1; i < this.points.length; i++){
+                            context.lineTo(this.points[i].x,this.points[i].y);
+                        }
+                        context.lineWidth = this.brw;
+                        context.closePath();
+                        context.fill();
+                        context.stroke();
+                    }
+                }
+            }
+            function Pencil(points,cbr,cbrw){
+                this.desc = PENCIL;
+                this.pos = 0;
+                if(points !== undefined){
+                    this.points = points;
+                }else{
+                    this.points = new Array();
+                }
+                this.cbr = cbr;
+                this.cbrw = cbrw;
+                this.draw = function(context){
+                    context.strokeStyle = this.cbr;
+                    context.beginPath();
+                    context.moveTo(this.points[0].x, this.points[0].y);
+                    for(var i = 1; i < this.points.length; i++){
+                        context.lineTo(this.points[i].x,this.points[i].y);
+                    }
+                    context.lineWidth = this.brw;
+                    context.stroke();
+                }
+            }
+            function ClosedPencil(points,cbg,cbr,cbrw){
+                this.desc = CLOSEDPENCIL;
+                this.pos = 0;
+                if(points !== undefined){
+                    this.points = points;
+                }else{
+                    this.points = new Array();
+                }
+                this.cbr = cbr;
+                this.cbrw = cbrw;
+                this.draw = function(context){
+                    context.fillStyle= this.cbg;
+                    context.strokeStyle = this.cbr;
+                    context.beginPath();
+                    context.moveTo(this.points[0].x, this.points[0].y);
+                    for(var i = 1; i < this.points.length; i++){
+                        context.lineTo(this.points[i].x,this.points[i].y);
+                    }
+                    context.lineTo(this.points[0].x, this.points[0].y);
+                    context.lineWidth = this.brw;
+                    context.closePath();
+                    context.fill();
+                    if(context.lineWidth>0){
+                        context.stroke();
+                    }
+                }
+            }
+            function Rubber(points,cbrw){
+                this.desc = RUBBER;
+                this.pos = 0;
+                if(points !== undefined){
+                    this.points = points;
+                }else{
+                    this.points = new Array();
+                }
+                this.cbrw = cbrw;
+                this.draw = function(context){
+                    for(var i = 0; i < this.points.length-1; i++){
+                        context.clearRect(this.points[i].x-this.brw/2,this.points[i].y-this.brw/2,this.brw/2,this.brw/2);
+                    }
+                    context.stroke();
+                }
+            }
+            function ImageForm(img,sx,sy,sw,sh,x,y,w,h){
+                this.desc = IMAGEFORM;
+                this.pos = 0;
+                this.img = img;
+                if(x !== undefined){
+                    this.x = x;
+                }else{
+                    this.x = 0;
+                }
+                if(y !== undefined){
+                    this.x = y;
+                }else{
+                    this.x = 0;
+                }
+                this.w = w;
+                this.h = h;
+                
+                this.sx = sx;
+                this.sy = sy;
+                this.sw = sw;
+                this.sh = sh;
+                
+                var elem = this;
+                this.draw = function(context){
+                    context.drawImage(this.img,this.sx,this.sy,this.sw,this.sh,this.x,this.y,this.w,this.h);
+                }
+                this.getImageFromSrc = function(src){
+                    var image = new Image;
+                    var b = false;
+                    image.onload = function(){
+                        elem = addImgToElem(elem, this);
+                        
+                        elem.img = image;//ctx.drawImage(this.src,0,0); // Or at whatever offset you like
+                    };
+                    image.src = src;
+                    //while(!b);
+                }
+                function addImgToElem(elem, img){
+                    elem.img = img;
+                    return elem;
+                }
+            }
+            function ClickXY(x,y){
+                this.x = x;
+                this.y = y;
+            }
+            function Layer(elements){
+                this.pos = 0;
+                
+                if(elements === undefined){
+                    this.elements = new Array();
+                }else{
+                    this.elements = elements;
+                }
+                this.name = "name";
+                this.desc = "desc";
+                this.visible = true;
+            }
+            
+            //OBJECTS
+
+            var tempElem = null,  tempElem2 = null;
+            var layers = new Array();
+            layers[0] = new Layer();
+            var clickDown = new ClickXY(0,0),
+                clickUp = new ClickXY(0,0),
+                mouseCurPos = new ClickXY(0,0);
+        </script>
+        <!--ONLOAD-->
+        <script>
+            //ONLOAD
+            window.onload = function(){
+                board = document.getElementById("board");
+                ctx = board.getContext("2d");
+
+                boardL = board.getBoundingClientRect().left;
+                boardT = board.getBoundingClientRect().top;
+                
+                getColor();
+                
+                loadEvents();
+                
+                layers[0].pos = 0;
+                layers[0].name = "Main";
+                layers[0].desc = "Main Layer";
+                updateLayerLists();
+                
+                
+                //START INTERVAL
+                document.getElementById("boardW").defaultValue  = 0;
+                document.getElementById("boardH").defaultValue  = 0;
+                boardWHChanged();
+                //document.getElementById("boardCover").style.width = "820px";
+                //document.getElementById("boardCover").style.height = "620px";
+                //board.width = 00;
+                //board.height = 00;
+                //boardCoverW = 20;
+                //boardCoverH = 20;
+                //setInterval(drawBoard, 10);
+                setTimeout(function(){ 
+                    document.getElementById("boardW").defaultValue  = 800;
+                    document.getElementById("boardH").defaultValue  = 600;
+                    boardWHChanged();
+                }, 1);
+                setInterval(drawBoard,10);
+                
+            };
+            
+            function drawBoard(){
+                //Resize
+                /*var boardCover = document.getElementById("boardCover");
+                if(boardCoverW !== parseInt(boardCover.style.width)){
+                    document.getElementById("boardW").value = parseInt(boardCover.style.width)-20;
+                    board.width = document.getElementById("boardW").value;
+                    boardCoverW = parseInt(boardCover.style.width);
+                }
+                if(boardCoverH !== parseInt(boardCover.style.height)){
+                    document.getElementById("boardH").value = parseInt(boardCover.style.height)-20;
+                    board.height = document.getElementById("boardH").value;
+                    boardCoverH = parseInt(boardCover.style.height);
+                }*/
+                boardL = board.getBoundingClientRect().left;
+                boardT = board.getBoundingClientRect().top;
+                
+                
+                
+                //DRAW BACKGROUND
+                
+                ctx.clearRect(0,0,board.width, board.height);
+                new Rect(0,0,board.width, board.height,bgColor,"#000000",0).draw(ctx);
+                
+                
+                
+                if(layers.length > 0){
+                    //DRAW LAYERS
+                    drawLayers(ctx);
+                    
+                    if(selElem != null){
+                        selElem.draw(ctx);
+                    }
+                }
+                
+                //Draw Grid
+                drawGrid();
+                
+            }
+            
+            //DRAW FUNCTIONS
+            function drawLayers(context){
+                var layer;
+                for(var i = 0; i < layers.length; i++){
+                    layer = layers[i];
+                    if(layer.visible){
+                        for(var j = 0; j < layer.elements.length; j++){
+                            layer.elements[j].draw(context);
+                        }
+                    }
+                    if(i === getCurrentLayer().pos){
+                        if(tempElem !== null){
+                            tempElem.draw(context);
+                            if(tempElem2!== null){
+                                tempElem2.draw(context);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            function drawGrid(){
+                var gridH = parseInt(document.getElementById("gridH").value);
+                var gridV = parseInt(document.getElementById("gridV").value);
+                if (gridH >0) {
+                    for (var i=gridH;i<board.height;i+=gridH){
+                        new Line(0,i,board.width,i,"gray",1).draw(ctx);
+                    }
+                }
+                if (gridV >0) {
+                    for (var i=gridV;i<board.width;i+=gridV){
+                        new Line(i,0,i,board.height,"gray",1).draw(ctx);
+                    }
+                }
+            }
+        </script>
+        <!--EVENTS-->
+        <script>
+            function loadEvents(){
+                //EVENTS
+                //CLICK EVENTS
+                
+                board.addEventListener("mousedown", clickedDown);
+                //board.addEventListener("touchstart", clickedDown);
+                board.addEventListener("dblclick", dblClicked);
+                document.body.addEventListener("mouseup", clickedUp);
+                //document.body.addEventListener("touchend", clickedUp);
+                document.addEventListener("mousemove", clickedMove);
+                //document.addEventListener("touchmove", clickedMove);
+
+                //KEY EVENTS
+                ////BODY
+                ////UNDO REDO
+                document.body.addEventListener("keydown",function(evt){
+                    keys[evt.keyCode] = true;
+                    document.getElementById("txtPressedKey").value = evt.keyCode;
+                    //CTRL+Z
+                    if (keys[17] && keys[90] && undoEnabled && elements.length>0) {
+                        undoEnabled = false;
+                        delElements.push(elements.pop());
+                        redoElemTable();
+                    }
+                    //CTRL+Y
+                    if (keys[17] && keys[89] && undoEnabled && delElements.length>0) {
+                        undoEnabled = false;
+                        elements.push(delElements.pop());
+                        redoElemTable();
+                    }
+                });
+                
+                document.body.addEventListener("keyup",function(evt){
+                    keys[evt.keyCode] = false;
+                    
+                    if (!keys[17] || (!keys[90] && !keys[89])) {
+                        undoEnabled = true;
+                    }
+                });
+                
+                //RADIOBUTTON CHANGE
+                var rdBtn = document.getElementsByName("action");
+                if(rdBtn){
+                    for(var i in rdBtn){
+                        rdBtn[i].onchange = function(){
+                           tempElem = null;
+                           tempElem2 = null;
+                           checked = false;
+                        };
+                    }
+                }
+                
+                //WINDOW EVENTS
+                var windowBars = document.getElementsByClassName("windowBar");
+                for(var i =0; i < windowBars.length; i++){
+                    //var win = windowBars[i].parentElement;
+                    windowBars[i].parentElement.style.zIndex = 1;
+                    windowBars[i].onmousedown = clickedWinBar;
+                    document.body.onmousemove = function(evt, win){
+                        if(bool_movingWin){
+                            //var wins = document.getElementsByClassName("window");
+                            var w = parseInt(window.getComputedStyle(selWin).width);
+                            var h = parseInt(window.getComputedStyle(selWin).height);
+                            selWin.style.left = evt.clientX-(w/2) + "px";
+                            selWin.style.top = evt.clientY-10 + "px";
+                        }
+                    }
+                    document.body.onmouseup = function(evt){
+                        bool_movingWin =  false;
+                        selElem = null;
+                        if(bool_movingWin){
+                            selWin.style.zIndex = 1;
+                        }
+                    }
+                }
+                
+                document.getElementById("boardW").addEventListener("change", function(){
+                    boardWHChanged(this);
+                });
+                document.getElementById("boardH").addEventListener("change", function(){
+                    boardWHChanged(this);
+                });
+            }
+            
+            function clickedWinBar(evt){
+                bool_movingWin =  true;
+                selWin = this.parentElement;
+                selWin.style.zIndex = 2;
+            }
+            
+            //CANVAS
+            function clickedDown(evt){
+                if(!bool_clicked && layers.length > 0){
+                    clickDown = getMousePosition(evt);
+                    bool_clicked = true;
+                }   
+                
+                var fig = document.querySelector('input[name = "action"]:checked').value;
+                
+                if(fig === SEMIARC){
+                    if(clickStep === -1  && layers.length > 0){clickStep = 0}
+                    bool_clicked = false;
+                    switch(clickStep){
+                        case 0:
+                            clickStep = 1;
+                            tempElem = new Line(mouseCurPos.x,mouseCurPos.y,mouseCurPos.x,mouseCurPos.y,"black",1);
+                            break;
+                        case 1:
+                            var b = tempElem.x2 -tempElem.x1;
+                            var h = tempElem.y2 -tempElem.y1;
+                            var r = Math.sqrt(Math.pow(b,2) + Math.pow(h,2));
+                            
+                            var g = Math.asin(h/r);
+                            if(b < 0 && h >= 0){
+                                g = Math.PI - g;
+                            }else if(b < 0 && h < 0){
+                                g = g * -1 + Math.PI;
+                            }else if(b >= 0 && h < 0){
+                                g += 2*Math.PI;
+                            }
+                            while(g>2*Math.PI){
+                                g -= 2*Math.PI;
+                            }
+                            
+                            tempElem = new Arc(tempElem.x1,tempElem.y1,r,g,g,getColor());
+                            tempElem.cbr = document.getElementById("borderColor").value;
+                            tempElem.brw = document.getElementById("borderWidth").value;
+                            clickStep = 2;
+                            break;
+                        case 2:
+                            if(tempElem.desc === ARC){
+                                if(tempElem.r < 0){
+                                    tempElem.r *= -1;
+                                }
+                            }
+                            
+                            var currLayer = document.getElementById("layerList").value;
+                            tempElem.pos = getCurrentLayer().elements.length;
+                            layers[currLayer].elements.push(tempElem);
+                            
+                            delElements = new Array();
+                            addElemToTable(tempElem);
+                            clickStep = 0;
+                            tempElem = null;
+                    }
+                }else if(fig === POLIGON){
+                    bool_clicked = false;
+                    if(tempElem === null){
+                        tempElem = new Poligon();
+                        tempElem.pos = getCurrentLayer().elements.length;
+                        tempElem.cbg = getColor();
+                    }
+                    tempElem.points.push(new ClickXY(mouseCurPos.x,mouseCurPos.y));
+                }else if(fig === COLORPICKER){
+                    var click = getMousePosition(evt);
+                    var imgData = ctx.getImageData(click.x, click.y, 1, 1);
+                    var red = imgData.data[0];
+                    var green = imgData.data[1];
+                    var blue = imgData.data[2];
+                    var alpha = imgData.data[3];
+                    document.getElementById("colorRed").value = red;
+                    document.getElementById("colorGreen").value = green;
+                    document.getElementById("colorBlue").value = blue;
+                    document.getElementById("colorAlpha").value = alpha*100/255;
+                    getColor();
+                }
+            
+            }
+            function clickedUp(evt){
+                //var layer = layers
+                if(bool_clicked && layers.length > 0){
+                    //clickUp = new ClickXY()
+                    clickUp = getMousePosition(evt);
+                    
+                    if (tempElem !== null) {
+                        
+                        if(tempElem.desc === RECT){
+                            if(tempElem.w < 0){
+                                tempElem.x += tempElem.w;
+                                tempElem.w = tempElem.w * -1;
+                            }
+                            if(tempElem.h < 0){
+                                tempElem.y += tempElem.h;
+                                tempElem.h = tempElem.h * -1;
+                            }
+                        }
+                        if(tempElem.desc === ARC){
+                            if(tempElem.r < 0){
+                                tempElem.r *= -1;
+                            }
+                        }
+                        
+                        
+                        
+                        
+                        var currLayer = document.getElementById("layerList").value;
+                        tempElem.pos = getCurrentLayer().elements.length;
+                        layers[currLayer].elements.push(tempElem);
+                        
+                        delElements = new Array();
+                        addElemToTable(tempElem);
+                    }
+                    
+                    bool_clicked = false;
+                    tempElem = null;
+                    clickUp = null;
+                    clickDown = null;
+                    
+                    redoElemTable();
+                }
+            }
+            function clickedMove(evt){
+                mouseCurPos = getMousePosition(evt);
+                var fig = document.querySelector('input[name = "action"]:checked').value;
+                if(bool_clicked){
+                    
+                    switch(fig){
+                        case RECT:
+                            if(tempElem === null){
+                                tempElem = new Rect();
+                            }
+                            tempElem.x = clickDown.x;
+                            tempElem.y = clickDown.y;
+                            tempElem.w = mouseCurPos.x - clickDown.x;
+                            tempElem.h = mouseCurPos.y - clickDown.y;
+                            tempElem.cbg = getColor();//document.getElementById("backgroundColor").value;
+                            tempElem.cbr = document.getElementById("borderColor").value;
+                            tempElem.brw = document.getElementById("borderWidth").value;
+                            tempElem.grad = document.getElementById("rectRotate").value;
+                            break;
+                        case ARC:
+                            if(tempElem === null){
+                                tempElem = new Arc();
+                            }
+                            tempElem.x = clickDown.x;
+                            tempElem.y = clickDown.y;
+                            tempElem.r = mouseCurPos.x - clickDown.x;
+                            tempElem.g1 = 0;
+                            tempElem.g2 = Math.PI * 2;
+                            tempElem.cbg = getColor();//document.getElementById("backgroundColor").value;
+                            tempElem.cbr = document.getElementById("borderColor").value;
+                            tempElem.brw = document.getElementById("borderWidth").value;
+                            break;
+                        case LINE:
+                            if(tempElem === null){
+                                tempElem = new Line();
+                            }
+                            tempElem.x1 = clickDown.x;
+                            tempElem.y1 = clickDown.y;
+                            tempElem.x2 = mouseCurPos.x;
+                            tempElem.y2 = mouseCurPos.y;
+                            tempElem.cbr = document.getElementById("borderColor").value;
+                            tempElem.brw = document.getElementById("borderWidth").value;
+                            break;
+                        case PENCIL:
+                            if(tempElem === null){
+                                tempElem = new Pencil();
+                                tempElem.cbr = document.getElementById("borderColor").value;;
+                                tempElem.brw = document.getElementById("borderWidth").value;
+                            }
+                            tempElem.points.push(mouseCurPos);
+                            break;
+                        case CLOSEDPENCIL:
+                            if(tempElem === null){
+                                tempElem = new ClosedPencil();
+                                tempElem.cbg = getColor();
+                                tempElem.cbr = document.getElementById("borderColor").value;;
+                                tempElem.brw = document.getElementById("borderWidth").value;
+                            }
+                            tempElem.points.push(mouseCurPos);
+                            break;
+                        case RUBBER:
+                            if(tempElem === null){
+                                tempElem = new Rubber();
+                                tempElem.brw = document.getElementById("borderWidth").value;
+                            }
+                            tempElem.points.push(mouseCurPos);
+                            break;
+                    }
+                }else if(fig === SEMIARC){
+                    switch(clickStep){
+                        case 1:
+                            tempElem.x2 = mouseCurPos.x;
+                            tempElem.y2 = mouseCurPos.y;
+                            break;
+                        case 2:
+                            ////////////////
+                            var lineRectB = mouseCurPos.x -tempElem.x;
+                            var lineRectH = mouseCurPos.y -tempElem.y;
+                            var mouseRect = Math.sqrt(Math.pow(lineRectB,2) + Math.pow(lineRectH,2));
+                            var r = tempElem.r;
+                            
+                            var b = lineRectB * r / mouseRect;
+                            var h = lineRectH * r / mouseRect;
+                            
+                            var g = Math.asin(h/r);
+                            if(b < 0 && h >= 0){
+                                g = Math.PI - g;
+                            }else if(b < 0 && h < 0){
+                                g = g * -1 + Math.PI;
+                            }else if(b >= 0 && h < 0){
+                                g += 2*Math.PI;
+                            }
+                            
+                            tempElem.g2 = g;
+                            
+                            document.getElementById("txtPressedKey").value = g/Math.PI;
+                            
+                            break;
+                    }
+                }else if(fig === POLIGON && tempElem !== null){
+                    tempElem2 = cloneObj(tempElem);
+                    //tempElem2 = new Poligon(tempElem.points,tempElem.cbg,tempElem.cbr,tempElem.brw);
+                    //tempElem2 = new Poligon();
+                    
+                    if(tempElem2.points.length > tempElem.points.length){
+                        tempElem2.points.splice(tempElem2.points.length-1,1);
+                    }
+                    tempElem2.points.push(new ClickXY(mouseCurPos.x,mouseCurPos.y));
+                }
+                //drawBoard();
+                document.getElementById("txtMousePos").setAttribute("value",mouseCurPos.x+"-"+mouseCurPos.y);
+            }
+            function dblClicked(){
+                var fig = document.querySelector('input[name = "action"]:checked').value;
+                if(fig===POLIGON && tempElem !== null){
+                    if(tempElem.points[tempElem.points.length-1].x === tempElem.points[tempElem.points.length-2].x && tempElem.points[tempElem.points.length-1].y === tempElem.points[tempElem.points.length-2].y){
+                        tempElem.points.splice(tempElem.points.length-1,1);
+                    }
+                    tempElem.points.splice(tempElem.points.length-1,1);
+                    tempElem.cbr = document.getElementById("borderColor").value;
+                    tempElem.brw = document.getElementById("borderWidth").value;
+                    getCurrentLayer().elements.push(tempElem);
+                    tempElem = null;
+                    tempElem2 = null;
+                    redoElemTable();
+                }
+            }
+            function elemListDblClickOnElem(elem){
+                if(document.getElementById("editorWindow")!==null){
+                    document.body.removeChild(document.getElementById("editorWindow"));
+                }
+                
+                
+                
+                
+                switch(elem.desc){
+                    case RECT:
+                    case ARC:
+                    case LINE:
+                        var win = getSimpleWindow(elem.desc);
+                        win = createEditorWindow(win, elem);
+                        win = addCloseButton(win);
+                        document.body.appendChild(win);
+                        break;
+                }
+                
+            }
+            function loadImage(filePath){
+                var f = filePath.files[0];
+                var reader = new FileReader();
+                reader.onloadend = function(e) {
+                    var img = new Image();
+                    
+                    img.onload = function(){
+                        var elem = new ImageForm();
+                        elem.img = this;
+                        elem.sx = 0;
+                        elem.sy = 0;
+                        elem.sw = img.width;
+                        elem.sh = img.height;
+                        elem.x = 0;
+                        elem.y = 0;
+                        elem.w = img.width;
+                        elem.h = img.height;
+                        getCurrentLayer().elements.push(elem);
+                        redoElemTable();
+                    }
+                    
+                    img.src = e.target.result;
+                   
+                }
+                reader.readAsDataURL(f);
+            }
+        </script>
+        <!--ELEM EDITOR WINDOWS CREATOR-->
+        <script>
+            function getSimpleWindow(title){
+                var win = document.createElement("SPAN");
+                var bar = document.createElement("SPAN");
+                var content = document.createElement("SPAN");
+                
+                bar.innerHTML = title;
+                bar.addEventListener("mousedown", clickedWinBar);
+                
+                win.className = "window";
+                bar.className = "windowBar";
+                content.className = "windowContent";
+                
+                win.appendChild(bar);
+                win.appendChild(content);
+                win.id = "editorWindow";
+                return win;
+            }
+            function createEditorWindow(win, elem){
+                var txtX = document.createTextNode("X");
+                var txtY = document.createTextNode("Y");
+                var txtW = document.createTextNode("W");
+                var txtH = document.createTextNode("H");
+                var txtR = document.createTextNode("R");
+                var txtX1 = document.createTextNode("X1");
+                var txtY1 = document.createTextNode("Y1");
+                var txtX2 = document.createTextNode("X2");
+                var txtY2 = document.createTextNode("Y2");
+                var txtG1 = document.createTextNode("G1");
+                var txtG2 = document.createTextNode("G2");
+                
+                var inputX = document.createElement("INPUT");
+                var inputY = document.createElement("INPUT");
+                var inputW = document.createElement("INPUT");
+                var inputH = document.createElement("INPUT");
+                var inputR = document.createElement("INPUT");
+                var inputX1 = document.createElement("INPUT");
+                var inputY1 = document.createElement("INPUT");
+                var inputX2 = document.createElement("INPUT");
+                var inputY2 = document.createElement("INPUT");
+                var inputG1 = document.createElement("INPUT");
+                var inputG2 = document.createElement("INPUT");
+                
+                var btnColor = document.createElement("INPUT");
+                
+                //LOAD NUMBER INPUTS
+                switch(elem.desc){
+                    case RECT://Rect(x,y,w,h,cbg,cbr,brw,grad)
+                        var inputs = [inputX, inputY, inputW, inputH];
+                        var txts = [txtX, txtY, txtW, txtH];
+                        var params = ["x","y","w","h"];
+                        var colors = ["cbg","cbr","brw"];
+                        break;
+                    case ARC://Arc(x,y,r,g1,g2,cbg,cbr,brw
+                        var inputs = [inputX, inputY, inputR, inputG1, inputG2];
+                        var txts = [txtX, txtY, txtR, txtG1, txtG2];
+                        var params = ["x","y","r","g1","g2"];
+                        var colors = ["cbg","cbr","brw"];
+                        break;
+                    case LINE://Line(x1,y1,x2,y2,cbr,brw)
+                        var inputs = [inputX1, inputY1, inputX2, inputY2];
+                        var txts = [txtX1, txtY1, txtX2, txtY2];
+                        var params = ["x1","y1","x2","y2"];
+                        var colors = ["cbr","brw"];
+                        break;
+                }
+                
+                var winContent = win.querySelector(".windowContent");
+                
+                for(var i in inputs){
+                    inputs[i].type = "number";
+                    inputs[i].min = 0;
+                    inputs[i].style.width = "200px";
+                    inputs[i].value = elem[params[i]];
+                    
+                    addEventsToWin(layer,elem,params,inputs, i);
+                    
+                    winContent.appendChild(txts[i]);
+                    winContent.appendChild(inputs[i]);
+                    winContent.appendChild(document.createElement("BR"));
+                }
+                
+                //LOAD COLOR button
+                switch(elem.desc){
+                    case RECT:
+                    case ARC:
+                        btnColor.onclick = function(){
+                            elem.cbg = getColor();
+                            elem.cbr = document.getElementById("borderColor").value;
+                            elem.brw = document.getElementById("borderWidth").value;
+                        }
+                        break;
+                    case LINE:
+                        btnColor.onclick = function(){
+                            elem.cbr = document.getElementById("borderColor").value;
+                            elem.brw = document.getElementById("borderWidth").value;
+                        }
+                        break;
+                }
+                btnColor.value = "Update Color";
+                btnColor.type = "button";
+                winContent.appendChild(btnColor);
+                winContent.appendChild(document.createElement("BR"));
+                
+                return win;
+            }
+            function addEventsToWin(layer,elem,params,inputs, i){
+                inputs[i].addEventListener("change", function(){
+                    
+                    var layer = getCurrentLayer();
+                    
+                    layer.elements[elem.pos][params[i]] = inputs[i].value;
+                });
+            }
+            
+            function addCloseButton(win){
+                var cls = document.createElement("INPUT");
+                cls.type = "button";
+                
+                cls.value = "X";
+                cls.style.color = "red";
+                
+                cls.onclick = function(){
+                    document.body.removeChild(document.getElementById("editorWindow"));
+                }
+                
+                win.appendChild(cls);
+                
+                return win;
+            }
+            
+        </script>
+        <!--ELEM AND LAYERS LIST LOAD AND UPDATE-->
+        <script>
+            
+            function updateLayerLists(){
+                var layerList = document.getElementById("layerList");
+                var ul = document.getElementById("enabledLayersList");
+                var op, li;//, input;
+                //var arrows, uparrow, downarrow, moveLayer;
+                layerList.innerHTML = "";
+                ul.innerHTML = "";
+                for(var i=0;i<layers.length;i++){
+                    //LISTBOX
+                    layer = layers[i];
+                    layer.pos = i;
+                    op = document.createElement("OPTION");
+                    op.value = layer.pos;
+                    op.innerHTML = layer.pos + " - " + layer.name;
+                    layerList.appendChild(op);
+                    
+                    //ENABLE VISIBLE LIST
+                    
+                    ul.appendChild(getLayerLi(layer));
+                }
+            }
+            function getLayerLi(layer){
+                var li = document.createElement("LI");
+                var input = document.createElement("INPUT");
+                var arrows = document.createElement("SPAN");
+                var uparrow = document.createElement("DIV");
+                var moveLayer = document.createElement("DIV");
+                var downarrow = document.createElement("DIV");
+                var delX = document.createElement("SPAN");
+                
+                //INPUT
+                input = document.createElement("INPUT");
+                input.type = "checkbox";
+                input.value = layer.visible;
+                input.name = layer.pos;
+                input.defaultValue = layer.visible;
+                input.addEventListener("change", function(){
+                    layers[layer.pos].visible = this.checked;
+                });
+                input.checked = layer.visible;
+                
+                uparrow.innerHTML = "&#8593";
+                moveLayer.innerHTML = "o";
+                downarrow.innerHTML = "&#8595";
+                delX.innerHTML = 'X';
+                delX.style.color = "red";
+                
+                uparrow.onclick = function(){
+                    var e = layers[layer.pos];
+                    layers[layer.pos] = layers[layer.pos-1];
+                    layers[layer.pos-1] = e;
+                    updateLayerLists();
+                    redoElemTable();
+                };
+                moveLayer.onclick = function(){
+                    var pos = prompt("Position ("+ 0 + " - " + (layers.length-1) + "):");
+                    if(pos >= 0 && pos<layers.length){
+                        var l = layers[layer.pos];
+                        layers[layer.pos] = layers[pos];
+                        layers[pos] = l;
+                        for(var j in layers){
+                            layers[j].pos = j;
+                        }
+                        updateLayerLists();
+                        redoElemTable();
+                    }
+                };
+                downarrow.onclick = function(){
+                    var pos = layer.pos;
+                    var e = layers[pos];
+                    layers[pos] = layers[pos+1];
+                    layers[pos+1] = e;
+                    updateLayerLists();
+                    redoElemTable();
+                };
+                delX.onclick = function(){
+                    layers.splice(layer.pos,1);
+                    for(var i in layers){
+                        layers[i].pos = i;
+                    }
+                    updateLayerLists();
+                    redoElemTable();
+                }
+                
+                var i;
+                if(layer.pos>0){
+                    arrows.appendChild(uparrow);
+                }
+                if(layers.length > 2){
+                    arrows.appendChild(moveLayer);
+                }
+                if(layer.pos < layers.length-1){
+                    arrows.appendChild(downarrow);
+                }
+                
+                arrows.style.display = "inline-block";
+                    
+                li.style.border = "dashed 1px black";
+                
+                li.appendChild(arrows);
+                
+                li.appendChild(input);
+                node = document.createTextNode(layer.name);
+                li.appendChild(node);
+                li.appendChild(delX);
+                
+                
+                
+                return li;
+            }
+            
+            function addElemToTable(elem){
+                var table = document.getElementById("elemsEditorTable");
+                
+                var li = document.createElement("li");
+                var txt = document.createElement("span");
+                var delElem =  document.createElement("span");
+                var arrows =  document.createElement("span");
+                var span =  document.createElement("span");
+                var pUp = document.createElement("div");
+                var pMove = document.createElement("div");
+                var pDown = document.createElement("div");
+                var elements = getCurrentLayer().elements;
+                
+                
+                txt.innerHTML = elem.pos + "-" + elem.desc;
+                /*switch(elem.desc){
+                    case RECT:
+                        span.innerHTML += "X:" + elem.x + "<br>";
+                        span.innerHTML += "Y:" + elem.y + "<br>";
+                        span.innerHTML += "W:" + elem.w + "<br>";
+                        span.innerHTML += "H:" + elem.h;
+                        break;
+                    case ARC || SEMIARC:
+                        span.innerHTML += "X:" + elem.x + "<br>";
+                        span.innerHTML += "Y:" + elem.y + "<br>";
+                        span.innerHTML += "R:" + elem.r;
+                        break;
+                    case LINE:
+                        span.innerHTML += "X1:" + elem.x1 + "<br>";
+                        span.innerHTML += "Y1:" + elem.y1 + "<br>";
+                        span.innerHTML += "X2:" + elem.x2 + "<br>";
+                        span.innerHTML += "Y2:" + elem.y2;
+                        break;
+                    case PENCIL || CLOSEDPENCIL:
+                        span.innerHTML += "IRREGULAR" + "<br>";
+                        break;
+                    case POLIGON:
+                        span.innerHTML += POLIGON + "<br>";
+                        break;
+                    case RUBBER:
+                        span.innerHTML += RUBBER + "<br>";
+                        break;
+                }
+                span.hidden = "hidden";
+                span.className = "hiddenDetails";
+                txt.appendChild(span);*/
+                txt.className = "elemDesc";
+                txt.onclick = function(){
+                    var listElements = document.getElementsByClassName("liElem");
+                    for(var i = 0; i < listElements.length; i++){
+                        if(i === parseInt(elem.pos)){
+                            listElements[i].style.backgroundColor="#CCCCFF";
+                        }else{
+                            listElements[i].style.backgroundColor = "#FFFFFF";
+                        }
+                    }
+                    
+                }
+                txt.addEventListener("dblclick",function(){
+                    elemListDblClickOnElem(elem);
+                });
+                
+                pUp.innerHTML = "&#8593;";
+                pMove.innerHTML = "o";
+                pDown.innerHTML = "&#8595;";
+                
+                
+                
+                pUp.onclick = function (){
+                    var currElem = elements[elem.pos];
+                    elements[elem.pos] = elements[elem.pos - 1];
+                    elements[elem.pos - 1] = currElem;
+                    redoElemTable();
+                }
+                pDown.onclick = function (){
+                    var currElem = elements[elem.pos];
+                    elements[elem.pos] = elements[parseInt(elem.pos) + 1];
+                    elements[parseInt(elem.pos) + 1] = currElem;
+                    redoElemTable();
+                }
+                pMove.onclick = function(){
+                    var pos = prompt("Position ("+ 0 + " - " + (elements.length-1) + "):");
+                    var currElem = elements[elem.pos];
+                    if(pos !== "" && pos >= 0 && pos<elements.length){
+                        var l = elements[currElem.pos];
+                        elements[currElem.pos] = elements[pos];
+                        elements[pos] = l;
+                        for(var j in elements){
+                            elements[j].pos = j;
+                        }
+                        //updateLayerLists();
+                        redoElemTable();
+                    }
+                }
+                
+                
+                delElem.onclick= function(){deleteElem(elem.pos);};
+                delElem.style.color = "red";
+                delElem.style.cursor = "pointer";
+                delElem.innerHTML = "X";
+                
+                
+                
+                if(elem.pos>0){
+                    arrows.appendChild(pUp);
+                }
+                if(elements.length > 2){
+                    arrows.appendChild(pMove);
+                }
+                if(elem.pos<elements.length - 1){
+                    arrows.appendChild(pDown);
+                }
+                arrows.style.display= "inline-block";
+                
+                li.style.verticalAlign = "middle";
+                li.style.border = "dashed 1px gray";
+                li.className = "liElem";
+                
+                
+                li.addEventListener("mousemove", function(){
+                    switch(elem.desc){
+                        case RECT:
+                            selElem = new Rect(elem.x,elem.y,elem.w,elem.h,"rgba(255,255,0,0.5)");
+                            break;
+                        case ARC:
+                            selElem = new Arc(elem.x,elem.y,elem.r,elem.g1,elem.g2,"rgba(255,255,0,0.5)");
+                            break;
+                        case LINE:
+                            selElem = new Line(elem.x1,elem.y1,elem.x2,elem.y2,"rgba(255,255,0,0.5)");
+                            break;
+                        case POLIGON:
+                            selElem = new Poligon(elem.points,"rgba(255,255,0,0.5)","black",1);
+                            break;
+                        case PENCIL || RUBBER:
+                            selElem = new Pencil(elem.points,"rgba(255,255,0,0.5)");
+                        case CLOSEDPENCIL:
+                            selElem = new ClosedPencil(elem.points,"rgba(255,255,0,0.5)","rgba(255,255,0,0.5)",elem.cbrw);
+                    }
+                });
+                li.addEventListener("mouseout", function(){
+                    selElem = null;
+                });
+                
+                li.appendChild(arrows);
+                li.appendChild(txt);
+                li.appendChild(delElem);
+		        table.appendChild(li);
+            }
+            
+            function redoElemTable(){
+                document.getElementById("elemsEditorTable").innerHTML="";
+                if(layers.length > 0){
+                    
+                    
+                    var elements = getCurrentLayer().elements;
+                    
+                    for(var i in elements){
+                        elements[i].pos = i;
+                        addElemToTable(elements[i]);
+                    }
+                }
+            }
+            
+            function deleteElem(pos){
+                var layer = getCurrentLayer();
+                layer.elements.splice(pos, 1);
+                selElem = null;
+                redoElemTable();
+            }
+            
+            function addLayer(){
+                var layer = new Layer();
+                layer.pos = layers.length;
+                layer.name = prompt("Layer name","Layer " + layers.length);
+                layer.desc = prompt("Layer description", layer.name);
+                layers.push(layer);
+                document.getElementById("layerList").value=parseInt(layers.length)-1;
+                updateLayerLists();
+                redoElemTable();
+            }
+            
+            function getCurrentLayer(){
+                var currLayer = document.getElementById("layerList").value;
+                return layers[currLayer];
+            }
+        </script>
+        <!--EXPORT AND SAVE FILE-->
+        <script>
+            function exportDesign(){
+                //DRAW FINAL DESIGN
+                var cnv = document.createElement("canvas");
+                
+                var w = document.getElementById("boardW").value;
+                var h = document.getElementById("boardH").value;
+                cnv.width = w;
+                cnv.height = h;
+                var context = cnv.getContext("2d");
+                new Rect(0,0,w,h,bgColor).draw(context);
+                
+                drawLayers(context);
+                //DOWNLOAD
+                var url = cnv.toDataURL("image/png");
+                var a = document.createElement("A");
+                a.href=url;
+                a.download = prompt("Insert file name :") + ".png";
+                a.click();
+            }
+            function saveDesignJson(){
+                var objFile = new masterJasonFile(board.width,board.height,backgroundColor,parseInt(document.getElementById("gridH").value),parseInt(document.getElementById("gridV").value),layers);
+                var textFileAsBlob = new Blob([JSON.stringify(objFile)], {type:'text/plain'});
+                
+                var a = document.createElement("A");
+                a.href = window.URL.createObjectURL(textFileAsBlob);
+                a.download = "design.json";
+                a.click();
+            }
+            function openDesignJson(filePath){
+                var f = filePath.files[0];
+                var reader = new FileReader();
+                reader.onloadend = function(e) {
+                    var jsonFile = JSON.parse(reader.result);
+                    
+                    
+                    
+                    board.width = jsonFile.canvas.width;
+                    board.height = jsonFile.canvas.height;
+                    
+                    backgroundColor = jsonFile.bgc;
+                    
+                    document.getElementById("gridH").value = jsonFile.grid.h;
+                    document.getElementById("gridV").value = jsonFile.grid.v;
+                    layers = new Array();
+                    var layer, fLayer,j,i,fElem, elem;
+                    for(var i in jsonFile.layers){
+                        fLayer = jsonFile.layers[i];
+                        layer = new Layer();
+                        layer.pos = fLayer.pos;
+                        layer.name = fLayer.name;
+                        layer.desc = fLayer.desc;
+                        layer.visible = fLayer.visible;
+                        for(j in fLayer.elements){
+                            fElem = fLayer.elements[j];
+                            
+                            switch(fElem.desc){
+                                case RECT:
+                                    elem = new Rect(fElem.x,fElem.y,fElem.w,fElem.h,fElem.cbg,fElem.cbr,fElem.brw,fElem.grad);
+                                    break;
+                                case ARC:
+                                    elem = new Arc(fElem.x,fElem.y,fElem.r,fElem.g1,fElem.g2,fElem.cbg,fElem.cbr,fElem.brw);
+                                    break;
+                                case LINE:
+                                    elem = new Line(fElem.x1,fElem.y1,fElem.x2,fElem.y2,fElem.cbr,fElem.brw);
+                                    break;
+                                case POLIGON:
+                                    selElem = new POLIGON(fElem.points,fElem.cbg,fElem.cbr,fElem.brw);
+                                    break;
+                                case PENCIL:
+                                    elem = new Pencil(fElem.points,fElem.cbr,fElem.brw);
+                                    break;
+                                case CLOSEDPENCIL:
+                                    elem = new Pencil(fElem.points,fElem.cbg,fElem.cbr,fElem.brw);
+                                    break;
+                            }
+                            elem.pos = j;
+                            layer.elements.push(elem);
+                        }
+                        layers.push(layer);
+                    }
+                    redoElemTable();
+                    updateLayerLists();
+                };
+                reader.readAsText(f);
+                
+            }
+        </script>
+        <!--OTHER FUNCTIONS-->
+        <script>
+            function getMousePosition(evt) {
+                var click;
+                if(evt.clientX != undefined){
+                    click = new ClickXY(parseInt(evt.clientX - boardL), parseInt(evt.clientY - boardT));
+                }else if(evt.touches[0].clientX != undefined){
+                    click = new ClickXY(parseInt(evt.touches[0].clientX - boardL), parseInt(evt.touches[0].clientY - boardT));
+                }
+                if(document.getElementById("drawOnGrid").checked){
+                    var gridH = document.getElementById("gridH").value;
+                    var gridV = document.getElementById("gridV").value;
+                    if (gridH>0) {
+                        click.y = Math.round(click.y/gridH)*gridH;
+                    }
+                    if (gridV>0) {
+                        click.x = Math.round(click.x/gridV)*gridV;
+                    }
+                }
+                return click;
+            }
+            
+            
+            function cloneObj(obj){
+                if(obj !== null){
+                    
+                    var obj2 = JSON.parse(JSON.stringify(obj));
+                    
+                    for(var i in obj){
+                        if(typeof obj[i] == 'function'){
+                            obj2[i] = obj[i];
+                        }
+                    }
+                    
+                    return obj2;
+                }
+            }
+            
+            
+
+            
+            function getColor() {
+                var r = document.getElementById("colorRed").value;
+                var g = document.getElementById("colorGreen").value;
+                var b = document.getElementById("colorBlue").value;
+                var a = parseInt(document.getElementById("colorAlpha").value)/100;
+                color = "rgba("+r+","+g+","+b+","+a+")";
+                document.getElementById("colorResult").style.backgroundColor = color;
+                var decColors = color.match(/\((\d+),(\d+),(\d+)/);
+                var rHex = parseInt(decColors[1]).toString(16);
+                var gHex = parseInt(decColors[2]).toString(16);
+                var bHex = parseInt(decColors[3]).toString(16);
+                if(rHex.length < 2)rHex = "0" + rHex;
+                if(gHex.length < 2)gHex = "0" + gHex;
+                if(bHex.length < 2)bHex = "0" + bHex;
+                document.getElementById("inputBgColor").value = "#" + rHex + gHex  + bHex;
+                return color;
+            }
+            
+            function setBgColor(){
+                bgColor = getColor();
+            }
+            function setColor(colorIn) {
+                if(colorIn.substring(0,1) === "#"){
+                    document.getElementById("colorRed").value = parseInt(colorIn.substring(1,3), 16);
+                    document.getElementById("colorGreen").value = parseInt(colorIn.substring(3,5), 16);
+                    document.getElementById("colorBlue").value = parseInt(colorIn.substring(5,7), 16);
+                }
+                document.getElementById("colorAlpha").value = 100;
+                getColor();
+            }
+            
+            function boardWHChanged(){
+                board.width = document.getElementById("boardW").value;
+                board.height = document.getElementById("boardH").value;
+            }
+        </script>
+        
+    </head>
+    <body>
+        <header align="center">
+            <span style="display: inline-block;">
+                <input type="button" value="Export" onclick="exportDesign()"/>
+                <input type="button" value="Save JSON" onclick="saveDesignJson()"/>
+                <input type='file' name="OpenFile" id="openFileJSON" value="Open JSON" onchange="openDesignJson(this)"/>
+            </span>
+        </header>
+        
+        <!--FREE WINDOWS-->
+        <!--TOOLS-->
+        <span class="window" id="toolsWindow"  style="vertical-align: top; top: 30px; left: 200px;" rowspan="2">
+            <span class="windowBar">Tools</span><br>
+            <span class="windowContent">
+                Width<br>
+                <input type="number" id="boardW" min="0"/><br>
+                Height<br>
+                <input type="number" id="boardH" min="0"/><br>
+                Vertical Grid<br>
+                <input type="number" id="gridV" value="20" min="0"/><br>
+                Horizontal Grid<br>
+                <input type="number" id="gridH" value="20" min="0"/><br>
+                
+                <input type="checkbox" id="drawOnGrid" value="true">Draw on grid<br>
+                
+                
+                <input type="radio" name="action" value="rect" checked="true">Rect<input type="Number" min="0" id="rectRotate" value="0" style="width: 50px;"><br>
+                <input type="radio" name="action" value="arc">Arc<br>
+                <input type="radio" name="action" value="semiarc">SemiArc<br>
+                <input type="radio" name="action" value="line">Line<br>
+                <input type="radio" name="action" value="poligon">Poligon<br>
+                <input type="radio" name="action" value="pencil">Pencil<br>
+                <input type="radio" name="action" value="closedpencil">Closed Pencil<br>
+                <input type="radio" name="action" value="rubber">Rubber<br>
+                <input type="radio" name="action" value="colorpicker">ColorPicker<br>
+                <input type="file" value="Load Local Image" onchange="loadImage(this)" multiple/><br>
+                <br>
+                MousePos<br><input type="text" id="txtMousePos"/><br>
+                <input type="text" id="txtPressedKey"/><br>
+            </span>
+        </span>
+        <!--COLOR-->
+        <span class="window" style=" top: 30px; left: 200px;">
+            <span class="windowBar">Color</span><br>
+            <span class="windowContent">
+                <table>
+                    <tr>
+                        <td>
+                            R<input type="range" id="colorRed" min="0" max="255" style="orient:vertical;" value="0" onchange="getColor()"/><br>
+                            G<input type="range" id="colorGreen" min="0" max="255" style="orient:vertical;" value="0" onchange="getColor()"/><br>
+                            B<input type="range" id="colorBlue" min="0" max="255" style="orient:vertical;" value="0" onchange="getColor()"/><br>
+                            A<input type="range" id="colorAlpha" min="0" max="100" style="orient:vertical;" value="100" onchange="getColor()"/><br>
+                        </td>
+                        <td id="colorResult" style="width: 20px; mouse: pointer">
+                            <input type="color" id="inputBgColor" onchange="setColor(this.value)"/>
+                        </td>
+                    </tr>
+                </table>
+                <input type="color" id="borderColor"/>
+                <input type="Number" id="borderWidth" min="0" value="1" style="width: 50px;"/>Border Width<br>
+                <input type="Button" id="btnBgColor" value="Set BackGround Color" style="width:100%;" onclick="setBgColor()"/>
+            </span>
+        </span>
+        <!--LAYERS-->
+        <span class="window" id="layerWindow" style="top: 30px; left: 1600px;">
+            <span class="windowBar">Layers</span><br>
+            <span class="windowContent">
+                <span style="display: block; min-height: 200px;">
+                    <ul style="list-style-type: none;" id="enabledLayersList"></ul>
+                </span>
+            </span>
+        </span>
+        <!--ELEMENTS-->
+        <span class="window" id="elemWindow" style=" top 450px; left:1000px;">
+            <span class="windowBar">Elements</span><br>
+            <span class="windowContent">
+                <select size="1" value="0" id="layerList" onchange="redoElemTable()"></select>
+                <input type="button" value="+" onclick="addLayer()"><br>
+                
+                <!--span style="border-style: ridge; display: block; max-height: 600px;"-->
+                    <!--table id="elemsEditorTable"></table-->
+                    <ul style="list-style-type: none;" id="elemsEditorTable"></ul>
+                <!--/span-->
+            </span>
+        </span>
+            
+        
+        <div style="" onresize="resizeBoard(this)" id="boardCover">
+        
+            <div><canvas id="board"></canvas></div>
+        </div>
+    </body>
+</html>
